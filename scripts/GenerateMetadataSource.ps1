@@ -115,6 +115,26 @@ if (!$version)
     Download-Nupkg "Microsoft.Windows.SDK.CPP.x64" $version $nugetSrcPackagesDir
 }
 
+$webview2Version = $null
+$defaultWebview2Version = "1.0.774.44"
+
+Write-Output "Looking for: $nugetSrcPackagesDir\Microsoft.Web.WebView2.1.0.*.nupkg..."
+$webview2Pkg = Get-ChildItem -path $nugetSrcPackagesDir -Include Microsoft.Web.WebView2.1.0.*.nupkg -recurse
+if ($webview2Pkg)
+{
+    $webview2Version = $webview2Pkg.BaseName.Substring("Microsoft.Web.WebView2.".Length)
+    Write-Output "Found NuGet package, version: $webview2Version"
+}
+
+if (!$webview2Version)
+{
+    $webview2Version = $defaultWebview2Version
+
+    Write-Output "No WebView2 nuget packages found at $nugetSrcPackagesDir. Downloading $webview2Version from nuget.org..."
+
+    Download-Nupkg "Microsoft.Web.WebView2" $webview2Version $nugetSrcPackagesDir
+}
+
 $nugetSrcPackagesDir = Join-Path -Path $artifactsDir "NuGetPackages"
 Create-Directory $nugetSrcPackagesDir
 
@@ -169,6 +189,8 @@ if (!$x64Pkg)
 $nugetDestPackagesDir = Join-Path -Path $artifactsDir "InstalledPackages"
 Create-Directory $nugetDestPackagesDir
 & $toolsDir\nuget.exe install Microsoft.Windows.SDK.CPP.x64 -version $version -source $nugetSrcPackagesDir -OutputDirectory $nugetDestPackagesDir
+
+& $toolsDir\nuget.exe install Microsoft.Web.WebView2 -version $webview2Version -source $nugetSrcPackagesDir -OutputDirectory $nugetDestPackagesDir
 
 # Clean up directory where generated source files go
 Create-Directory $sdkGeneratedSourceDir

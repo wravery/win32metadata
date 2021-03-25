@@ -1,0 +1,15 @@
+--file
+<PartitionDir>\main.cpp
+--output
+<GeneratedSourceDir>\<PartitionName>.cs
+--include-directory
+<RepoRoot>\generation\scraper
+<IncludeRoot>/shared
+<IncludeRoot>/um
+<WebView2Root>/include
+--traverse
+<WebView2Root>/include/WebView2.h
+--namespace
+Windows.Win32.WebView2
+--libraryPath
+<WebView2Root>/x64/WebView2Loader.dll

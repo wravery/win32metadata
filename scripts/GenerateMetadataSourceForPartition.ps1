@@ -59,9 +59,10 @@ $fixedSettingsRsp = "$generationOutArtifactsDir\$partitionName.fixedSettings.rsp
 
 Copy-Item $partitionSettingsRsp -Destination $fixedSettingsRsp
 
-$includePath = (Get-ChildItem -Path "$nugetDestPackagesDir\Microsoft.Windows.SDK.CPP.$version\c\Include").FullName.Replace('\', '/')
+$includeRoot = (Get-ChildItem -Path "$nugetDestPackagesDir\Microsoft.Windows.SDK.CPP.$version\c\Include").FullName.Replace('\', '/')
+$webview2Root = (Get-ChildItem -Path "$nugetDestPackagesDir\Microsoft.Web.WebView2.1.0.*\build\native").FullName.Replace('\', '/')
 $generatedSourceDir = "$rootDir\generation\emitter\generated"
-[hashtable]$textToReplaceTable = @{ "<IncludeRoot>" = $includePath; "<RepoRoot>" = $rootDir; "<PartitionName>" = $partitionName; "<PartitionDir>" = $partitionGenerateDir; "<GeneratedSourceDir>" = $generatedSourceDir}
+[hashtable]$textToReplaceTable = @{ "<IncludeRoot>" = $includeRoot; "<WebView2Root>" = $webview2Root; "<RepoRoot>" = $rootDir; "<PartitionName>" = $partitionName; "<PartitionDir>" = $partitionGenerateDir; "<GeneratedSourceDir>" = $generatedSourceDir}
 Replace-Text $fixedSettingsRsp $textToReplaceTable
 
 Write-Output "$($indent)$partitionName..."
