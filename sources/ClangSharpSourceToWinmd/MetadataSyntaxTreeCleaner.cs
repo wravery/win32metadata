@@ -11,9 +11,9 @@ namespace ClangSharpSourceToWinmd
 {
     public static class MetadataSyntaxTreeCleaner
     {
-        public static SyntaxTree CleanSyntaxTree(SyntaxTree tree, Dictionary<string, string> remaps, Dictionary<string, string> requiredNamespaces, HashSet<string> nonEmptyStructs, string filePath)
+        public static SyntaxTree CleanSyntaxTree(SyntaxTree tree, Dictionary<string, string> remaps, Dictionary<string, Dictionary<string, string>> enumAdditions, HashSet<string> enumsMakeFlags, Dictionary<string, string> requiredNamespaces, HashSet<string> nonEmptyStructs, string filePath)
         {
-            TreeRewriter treeRewriter = new TreeRewriter(remaps, requiredNamespaces, nonEmptyStructs);
+            TreeRewriter treeRewriter = new TreeRewriter(remaps, enumAdditions, enumsMakeFlags, requiredNamespaces, nonEmptyStructs);
             var newRoot = (CSharpSyntaxNode)treeRewriter.Visit(tree.GetRoot());
             return CSharpSyntaxTree.Create(newRoot, null, filePath);
         }
@@ -24,16 +24,20 @@ namespace ClangSharpSourceToWinmd
 
             private HashSet<SyntaxNode> nodesWithMarshalAs = new HashSet<SyntaxNode>();
             private Dictionary<string, string> remaps;
+            private Dictionary<string, Dictionary<string, string>> enumAdditions;
             private Dictionary<string, string> requiredNamespaces;
             private HashSet<string> visitedDelegateNames = new HashSet<string>();
             private HashSet<string> visitedStaticMethodNames = new HashSet<string>();
             private HashSet<string> nonEmptyStructs;
+            private HashSet<string> enumsToMakeFlags;
 
-            public TreeRewriter(Dictionary<string, string> remaps, Dictionary<string, string> requiredNamespaces, HashSet<string> nonEmptyStructs)
+            public TreeRewriter(Dictionary<string, string> remaps, Dictionary<string, Dictionary<string, string>> enumAdditions, HashSet<string> enumsToMakeFlags, Dictionary<string, string> requiredNamespaces, HashSet<string> nonEmptyStructs)
             {
                 this.remaps = remaps;
+                this.enumAdditions = enumAdditions;
                 this.requiredNamespaces = requiredNamespaces;
                 this.nonEmptyStructs = nonEmptyStructs;
+                this.enumsToMakeFlags = enumsToMakeFlags;
             }
 
             public override SyntaxNode VisitParameter(ParameterSyntax node)
@@ -63,19 +67,19 @@ namespace ClangSharpSourceToWinmd
                     {
                         node = node.WithType(SyntaxFactory.ParseTypeName(newType).WithTrailingTrivia(SyntaxFactory.Space));
                     }
-
-                    return node;
                 }
-
-                var ret = (ParameterSyntax)base.VisitParameter(node);
+                else
+                {
+                    node = (ParameterSyntax)base.VisitParameter(node);
+                }
 
                 // Get rid of default parameter values
-                if (ret.Default != null)
+                if (node.Default != null)
                 {
-                    ret = ret.WithDefault(null);
+                    node = node.WithDefault(null);
                 }
 
-                return ret;
+                return node;
             }
 
             public override SyntaxNode VisitStructDeclaration(StructDeclarationSyntax node)
@@ -239,6 +243,54 @@ namespace ClangSharpSourceToWinmd
                 return base.VisitAttributeList(node);
             }
 
+            public override SyntaxNode VisitEnumDeclaration(EnumDeclarationSyntax node)
+            {
+                node = (EnumDeclarationSyntax)base.VisitEnumDeclaration(node);
+
+                var enumName = node.Identifier.ValueText;
+                if (this.enumAdditions.TryGetValue(enumName, out var additionsList))
+                {
+                    List<EnumMemberDeclarationSyntax> newMembers = new List<EnumMemberDeclarationSyntax>();
+                    foreach (var additionPair in additionsList)
+                    {
+                        var member =
+                            SyntaxFactory.EnumMemberDeclaration(additionPair.Key)
+                                .WithEqualsValue(
+                                    SyntaxFactory.EqualsValueClause(
+                                        SyntaxFactory.ParseExpression(additionPair.Value)));
+                        newMembers.Add(member);
+                    }
+
+                    node = node.AddMembers(newMembers.ToArray());
+                }
+
+                if (this.enumsToMakeFlags.Contains(enumName))
+                {
+                    bool hasFlags = SyntaxUtils.GetAttribute(node.AttributeLists, "Flags") != null;
+                    if (!hasFlags)
+                    {
+                        node =
+                            node.AddAttributeLists(
+                                SyntaxFactory.AttributeList(
+                                    SyntaxFactory.SingletonSeparatedList<AttributeSyntax>(
+                                        SyntaxFactory.Attribute(SyntaxFactory.ParseName("Flags")))).WithLeadingTrivia(node.GetLeadingTrivia()));
+                    }
+
+                    if (node.BaseList == null)
+                    {
+                        var baseList =
+                            SyntaxFactory.BaseList(
+                                SyntaxFactory.SingletonSeparatedList<BaseTypeSyntax>(
+                                    SyntaxFactory.SimpleBaseType(SyntaxFactory.ParseTypeName("uint").WithLeadingTrivia(SyntaxFactory.Space))))
+                                    .WithTrailingTrivia(SyntaxFactory.Whitespace("\r\n"));
+                        node = node.WithIdentifier(node.Identifier.WithTrailingTrivia(SyntaxFactory.Space));
+                        node = node.WithBaseList(baseList);
+                    }
+                }
+
+                return node;
+            }
+
             public override SyntaxNode VisitDelegateDeclaration(DelegateDeclarationSyntax node)
             {
                 string fullName = SyntaxUtils.GetFullName(node);
@@ -269,11 +321,11 @@ namespace ClangSharpSourceToWinmd
 
                             node = node.WithAttributeLists(node.AttributeLists.Add(attrListNode));
                         }
+                    }
 
-                        if (newType != null)
-                        {
-                            node = node.WithReturnType(SyntaxFactory.ParseTypeName(newType).WithTrailingTrivia(SyntaxFactory.Space));
-                        }
+                    if (newType != null)
+                    {
+                        node = node.WithReturnType(SyntaxFactory.ParseTypeName(newType).WithTrailingTrivia(SyntaxFactory.Space));
                     }
 
                     return node;
@@ -284,7 +336,7 @@ namespace ClangSharpSourceToWinmd
 
             public override SyntaxNode VisitMethodDeclaration(MethodDeclarationSyntax node)
             {
-                // Skip methods where we weren't given a import lib name. Should we warn the caller?
+                // Skip methods where we weren't given an import lib name. Should we warn the caller?
                 if (node.AttributeLists.ToString().Contains("[DllImport(\"\""))
                 {
                     return null;
@@ -426,6 +478,7 @@ namespace ClangSharpSourceToWinmd
                     case "LPWSTR":
                     case "PWSTR":
                     case "LPOLESTR":
+                    case "PNZWCH":
                     case "WCHAR *":
                     case "OLECHAR *":
                     case "wchar_t *":
@@ -436,6 +489,7 @@ namespace ClangSharpSourceToWinmd
                     case "LPCWSTR":
                     case "PCWSTR":
                     case "LPCWCH":
+                    case "PCNZWCH":
                     case "LPCOLESTR":
                     case "const OLECHAR *":
                     case "const WCHAR *":
@@ -510,6 +564,10 @@ namespace ClangSharpSourceToWinmd
             {
                 string nativeType = nativeTypeNameAttr.ArgumentList.Arguments[0].ToString();
                 nativeType = EncodeHelpers.RemoveQuotes(nativeType);
+                if (nativeType == "PCNZWCH")
+                {
+
+                }
 
                 List<AttributeSyntax> attributeNodes = new List<AttributeSyntax>();
 
@@ -680,7 +738,7 @@ namespace ClangSharpSourceToWinmd
 
                 if (!string.IsNullOrEmpty(nativeArrayInfoParams))
                 {
-                    var attrName = SyntaxFactory.ParseName("NativeArrayInfo");
+                    var attrName = SyntaxFactory.ParseName(nativeArrayInfoParams.Contains("BytesParamIndex") ? "MemorySize" : "NativeArrayInfo");
                     var args = SyntaxFactory.ParseAttributeArgumentList(nativeArrayInfoParams.ToString());
                     var finalAttr = SyntaxFactory.Attribute(attrName, args);
                     attributesList.Add(finalAttr);
@@ -744,7 +802,7 @@ namespace ClangSharpSourceToWinmd
                                 ret.Append(", ");
                             }
 
-                            ret.Append($"SizeConst = {size}");
+                            ret.Append($"CountConst = {size}");
                         }
                         else
                         {
@@ -758,7 +816,7 @@ namespace ClangSharpSourceToWinmd
                                         ret.Append(", ");
                                     }
 
-                                    string propName = p1Text.StartsWith("elementCount") ? "SizeParamIndex" : "BytesParamIndex";
+                                    string propName = p1Text.StartsWith("elementCount") ? "CountParamIndex" : "BytesParamIndex";
                                     ret.Append($"{propName} = {i}");
                                     break;
                                 }
@@ -800,6 +858,9 @@ namespace ClangSharpSourceToWinmd
 
             private bool GetRemapInfo(string fullName, out List<AttributeSyntax> listAttributes, string currentType, out string newType, out string newName)
             {
+                listAttributes = null;
+                newName = null;
+
                 if (!string.IsNullOrEmpty(fullName) && this.remaps.TryGetValue(fullName, out string remapData))
                 {
                     var ret = EncodeHelpers.DecodeRemap(remapData, out listAttributes, out newType, out newName);
@@ -817,16 +878,24 @@ namespace ClangSharpSourceToWinmd
                                 newType += currentType.Substring(starIndex);
                             }
                         }
-                        else
-                        {
-                            newType = null;
-                        }
                     }
 
                     return ret;
                 }
+                else
+                {
+                    // See if the type ends in the magic suffix. We use a remap fed to clangsharp 
+                    // to keep some typedefs from following down to their original type
+                    const string RevertToTypeSuffix = "___";
 
-                listAttributes = null;
+                    EncodeHelpers.SplitType(currentType, out var typeOnly, out var pointers);
+                    if (typeOnly.EndsWith(RevertToTypeSuffix))
+                    {
+                        newType = typeOnly.Substring(0, typeOnly.Length - RevertToTypeSuffix.Length) + pointers;
+                        return true;
+                    }
+                }
+
                 newType = null;
                 newName = null;
 

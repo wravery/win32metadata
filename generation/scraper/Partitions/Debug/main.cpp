@@ -3,7 +3,7 @@
 
 #include "intrinfix.h"
 
-#include <windows.h>
+#include "windows.fixed.h"
 #include <sdkddkver.h>
 
 #include <wct.h>
@@ -11,3 +11,4 @@
 #include <activdbg.h>
 #include <activprof.h>
 #include <webapplication.h>
+#include <dbghelp.h>

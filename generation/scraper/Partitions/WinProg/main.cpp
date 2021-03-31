@@ -3,8 +3,10 @@
 
 #include "intrinfix.h"
 
-#include <windows.h>
+#include "windows.fixed.h"
 #include <sdkddkver.h>
+
+#include <mmsystem.h>
 
 #include <wtypes.h>
 #include <winbase.h>
@@ -58,7 +60,7 @@
 #include <filehc.h>
 #include <aux_ulib.h>
 #include <winreg.h>
-#include <rtlsupportapi.h>
+//#include <rtlsupportapi.h>
 #include <stralign.h>
 //#include <tcpioctl.h>
 #include <tdiinfo.h>
@@ -71,4 +73,5 @@
 #include <fltdefs.h>
 #include <statehelpers.h>
 
-//#include <basetsd.h>
+#include <reason.h>
+

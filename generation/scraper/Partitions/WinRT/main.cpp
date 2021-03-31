@@ -3,7 +3,7 @@
 
 #include "intrinfix.h"
 
-#include <windows.h>
+#include "windows.fixed.h"
 #include <sdkddkver.h>
 
 //#define RO_NO_TEMPLATE_NAME
@@ -45,6 +45,7 @@
 #include <roparameterizediid.h>
 #include <roregistrationapi.h>
 #include <shcore.h>
+#include <memorybuffer.h>
 
 /*
 #include <winnt.h>
@@ -59,7 +60,6 @@
 #include <inputpaneinterop.h>
 //#include <inspectable.h>
 //#include <ivectorchangedeventargs.h>
-#include <memorybuffer.h>
 //#include <objidl.h>
 #include <playtomanagerinterop.h>
 #include <printmanagerinterop.h>

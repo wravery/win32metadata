@@ -36,6 +36,7 @@ Windows.Win32.SystemServices,PSTR,byte*
 Windows.Win32.WinRT,HSTRING,DECLARE_HANDLE,WindowsDeleteString
 Windows.Win32.WinRT,HSTRING_BUFFER,DECLARE_HANDLE
 Windows.Win32.SystemServices,HANDLE,DECLARE_HANDLE,CloseHandle
+Windows.Win32.SystemServices,NonClosableHandle,IntPtr,,HANDLE
 Windows.Win32.SystemServices,HINSTANCE,DECLARE_HANDLE,FreeLibrary
 Windows.Win32.Gdi,HDC,DECLARE_HANDLE,ReleaseDC
 Windows.Win32.Gdi,CreatedHDC,IntPtr,DeleteDC,HDC
@@ -52,7 +53,7 @@ Windows.Win32.WindowsAndMessaging,HHOOK,DECLARE_HANDLE,UnhookWindowsHookEx
 Windows.Win32.MenusAndResources,HICON,DECLARE_HANDLE,DestroyIcon
 Windows.Win32.Gdi,HPALETTE,DECLARE_HANDLE,DeleteObject
 Windows.Win32.MenusAndResources,HMENU,DECLARE_HANDLE,DestroyMenu
-Windows.Win32.MenusAndResources,HCURSOR,DECLARE_HANDLE,DestroyCursor
+Windows.Win32.MenusAndResources,HCURSOR,DECLARE_HANDLE,DestroyCursor,HICON
 Windows.Win32.SystemServices,TimerQueueHandle,IntPtr,DeleteTimerQueueEx
 Windows.Win32.SystemServices,PTP_POOL,IntPtr,CloseThreadpool
 Windows.Win32.SystemServices,NamespaceHandle,IntPtr,ClosePrivateNamespace
@@ -74,6 +75,7 @@ Windows.Win32.IpHelper,IcmpHandle,IntPtr,IcmpCloseHandle
 Windows.Win32.Gdi,HdcMetdataFileHandle,IntPtr,DeleteMetaFile
 Windows.Win32.Gdi,HdcMetdataEnhFileHandle,IntPtr,DeleteEnhMetaFile
 Windows.Win32.SystemServices,HeapHandle,IntPtr,HeapDestroy
+Windows.Win32.SystemServices,ProcessHeapHandle,IntPtr,,HeapHandle
 Windows.Win32.WindowsColorSystem,HCOLORSPACE,DECLARE_HANDLE,DeleteColorSpace
 Windows.Win32.WindowsStationsAndDesktops,HDESK,DECLARE_HANDLE,CloseDesktop
 Windows.Win32.MenusAndResources,HACCEL,DECLARE_HANDLE,DestroyAcceleratorTable
@@ -207,3 +209,6 @@ Windows.Win32.AllJoyn,alljoyn_sessionopts,AllJoynHandle
 Windows.Win32.AllJoyn,alljoyn_sessionportlistener,AllJoynHandle
 Windows.Win32.SystemServices,HPCON,IntPtr,ClosePseudoConsole
 Windows.Win32.Controls,HTREEITEM,IntPtr
+Windows.Win32.SystemServices,LPPROC_THREAD_ATTRIBUTE_LIST,void*
+Windows.Win32.Hypervisor,WHV_PARTITION_HANDLE,IntPtr,WHvDeletePartition
+Windows.Win32.SystemServices,CHAR,byte

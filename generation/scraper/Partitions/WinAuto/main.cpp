@@ -3,13 +3,13 @@
 
 #include "intrinfix.h"
 
-#include <windows.h>
+#include "windows.fixed.h"
 #include <sdkddkver.h>
 
 #include <winuser.h>
 #include <windef.h>
 #include <msaatext.h>
 #include <oleacc.h>
+#include <uiautomationclient.h>
 #include <uiautomationcore.h>
 #include <uiautomationcoreapi.h>
-#include <uiautomationclient.h>

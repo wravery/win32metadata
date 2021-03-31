@@ -16,6 +16,7 @@ using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using PartitionUtilsLib;
 
 namespace ClangSharpSourceToWinmd
 {
@@ -28,6 +29,10 @@ namespace ClangSharpSourceToWinmd
         private const string ScannedSuffix = "__scanned__";
 
         private static readonly Regex TypeImportRegex = new Regex(@"<(([^,]+),\s*Version=(\d+\.\d+\.\d+\.\d+),\s*Culture=([^,]+),\s*PublicKeyToken=([^>]+))>(\S+)");
+        private static readonly Regex IsSpecialNameRegex = new Regex(@"^(?:get_|put_|add_|remove_|invoke_)");
+        private static readonly Regex IsWcharRegex = new Regex(@"^(?:WCHAR|OLECHAR|wchar_t)");
+        private static readonly Regex IsCharRegex = new Regex(@"^(?:CHAR|char)");
+        private static readonly Regex ArrayMatcher = new Regex(@"\[\d*\]");
 
         private MetadataBuilder metadataBuilder = new MetadataBuilder();
         private CSharpCompilation compilation;
@@ -598,9 +603,18 @@ namespace ClangSharpSourceToWinmd
 
         private ITypeSymbol GetTypeFromShortName(string name)
         {
+            var origName = name;
+
+            // If it's an array, treat it like a pointer
+            var arrayMatch = ArrayMatcher.Match(name);
+            if (arrayMatch.Success)
+            {
+                name = name.Substring(0, arrayMatch.Captures[0].Index) + "*";
+            }
+
             if (!this.nameToSymbols.TryGetValue(name, out var ret))
             {
-                string fixedName = name;
+                string fixedName = origName;
 
                 switch (name)
                 {
@@ -616,6 +630,10 @@ namespace ClangSharpSourceToWinmd
                     case "PCSTR":
                     case "PZZSTR":
                     case "CPZZSTR":
+                    case "CHAR *":
+                    case "char *":
+                    case "const CHAR *":
+                    case "const char *":
                         fixedName = Win32StringType;
                         break;
 
@@ -637,6 +655,8 @@ namespace ClangSharpSourceToWinmd
                     case "const wchar_t *":
                     case "PZZWSTR":
                     case "PCZZWSTR":
+                    case "PNZWCH":
+                    case "PCNZWCH":
                         fixedName = Win32WideStringType;
                         break;
 
@@ -675,6 +695,27 @@ namespace ClangSharpSourceToWinmd
 
         private void RemapToMoreSpecificTypeIfPossible(string parent, ImmutableArray<AttributeData> ownerAttributes, ref ITypeSymbol typeSymbol)
         {
+            // Can't do anything without a NativeTypeNameAttribute 
+            var nativeTypeNameAttr = ownerAttributes.FirstOrDefault(a => a.AttributeClass.Name == "NativeTypeNameAttribute");
+            if (nativeTypeNameAttr == null)
+            {
+                return;
+            }
+
+            var originalTypeName = nativeTypeNameAttr.ConstructorArguments[0].Value.ToString();
+
+            if (typeSymbol.SpecialType == SpecialType.System_SByte && IsCharRegex.IsMatch(originalTypeName))
+            {
+                typeSymbol = this.GetTypeFromShortName("CHAR");
+                return;
+            }
+
+            if (typeSymbol.SpecialType == SpecialType.System_UInt16 && IsWcharRegex.IsMatch(originalTypeName))
+            {
+                typeSymbol = this.GetTypeFromShortName("System.Char");
+                return;
+            }
+
             var typeName = typeSymbol.ToString();
 
             // See if we can map from some generic types to a more specific type
@@ -689,13 +730,6 @@ namespace ClangSharpSourceToWinmd
                 typeName.StartsWith("uint*") ||
                 typeName.StartsWith("void*"))
             {
-                var attr = ownerAttributes.FirstOrDefault(a => a.AttributeClass.Name == "NativeTypeNameAttribute");
-                if (attr == null)
-                {
-                    return;
-                }
-
-                var originalTypeName = attr.ConstructorArguments[0].Value.ToString();
                 if (originalTypeName.StartsWith("const "))
                 {
                     originalTypeName = originalTypeName.Substring("const ".Length);
@@ -711,6 +745,21 @@ namespace ClangSharpSourceToWinmd
                 var parts = originalTypeName.Split(' ');
                 var nameOnly = parts[0];
                 var star = parts.Length > 1 ? parts[1] : null;
+
+                if (star != null)
+                {
+                    // If this is an array, treat it like a pointer
+                    if (star[0] == '[')
+                    {
+                        star = "*";
+                    }
+                    // Make sure it's actually a pointer. If it's not, we can't do anything more
+                    else if (star[0] != '*')
+                    {
+                        return;
+                    }
+                }
+
                 newTypeSymbol = this.GetTypeFromShortName(nameOnly);
 
                 if (newTypeSymbol != null)
@@ -1551,16 +1600,22 @@ namespace ClangSharpSourceToWinmd
             var symbol = model.GetDeclaredSymbol(node);
 
             var inheritedMethodCount = this.GetInheritedMethodCount(node);
-            
+
             foreach (MethodDeclarationSyntax method in node.Members.Where(m => m is MethodDeclarationSyntax).Skip(inheritedMethodCount))
             {
                 var methodSymbol = model.GetDeclaredSymbol(method);
                 var methodName = methodSymbol.Name;
+                MethodAttributes methodAttributes = MethodAttributes.Public | MethodAttributes.HideBySig | MethodAttributes.NewSlot | MethodAttributes.Abstract | MethodAttributes.Virtual;
+
+                if (IsSpecialNameRegex.IsMatch(methodName))
+                {
+                    methodAttributes |= MethodAttributes.SpecialName;
+                }
 
                 var methodDef =
                     this.AddMethodViaSymbol(
                         methodSymbol,
-                        MethodAttributes.Public | MethodAttributes.HideBySig | MethodAttributes.NewSlot | MethodAttributes.Abstract | MethodAttributes.Virtual,
+                        methodAttributes,
                         MethodImplAttributes.Managed,
                         true);
 

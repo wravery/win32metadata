@@ -2,13 +2,18 @@
 
 #include "intrinfix.h"
 
-#include <windows.h>
+#include "windows.fixed.h"
 #include <sdkddkver.h>
+
+#include <mmsystem.h>
+#include <winsmcrd.h>
+#include <winspool.h>
 
 // Headers needed for COM
 #include <objbase.h>
 #include <ObjIdl.h>
 #include <combaseapi.h>
+#include <vdssys.h>
 
 //
 // Begin of area needing to be close to COM headers
@@ -45,7 +50,6 @@
 #include <memoryapi.h>
 #include <minwinbase.h>
 #include <wct.h>
-#include <dbghelp.h>
 #include <minidumpapiset.h>
 //#include <imagehlp.h> // Can't use with dbghelp.h
 #include <winioctl.h>

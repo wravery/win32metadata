@@ -6,7 +6,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-namespace ClangSharpSourceToWinmd
+namespace PartitionUtilsLib
 {
     public static class EncodeHelpers
     {
@@ -59,6 +59,21 @@ namespace ClangSharpSourceToWinmd
         public static void EncodeConstant(this LiteralEncoder encoder, object constant)
         {
             encoder.Scalar().Constant(constant);
+        }
+
+        public static void SplitType(string fullType, out string typeOnly, out string pointers)
+        {
+            int starIndex = fullType.IndexOf('*');
+            if (starIndex != -1)
+            {
+                typeOnly = fullType.Substring(0, starIndex);
+                pointers = fullType.Substring(starIndex);
+            }
+            else
+            {
+                typeOnly = fullType;
+                pointers = string.Empty;
+            }
         }
 
         public static string RemoveQuotes(string text)

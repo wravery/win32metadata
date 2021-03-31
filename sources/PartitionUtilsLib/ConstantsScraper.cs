@@ -15,14 +15,16 @@ namespace PartitionUtilsLib
         public static void ScrapeConstants(
             string repoRoot,
             string[] enumJsonFiles,
+            string constantsHeaderText,
             Dictionary<string, string> exclusionNamesToPartitions,
             Dictionary<string, string> requiredNamespaces,
             Dictionary<string, string> remaps,
             Dictionary<string, string> withTypes,
-            Dictionary<string, string> renames)
+            Dictionary<string, string> renames,
+            Dictionary<string, string> withAttributes)
         {
             using ConstantsScraperImpl imp = new ConstantsScraperImpl();
-            imp.ScrapeConstants(repoRoot, enumJsonFiles, exclusionNamesToPartitions, requiredNamespaces, remaps, withTypes, renames);
+            imp.ScrapeConstants(repoRoot, enumJsonFiles, constantsHeaderText, exclusionNamesToPartitions, requiredNamespaces, remaps, withTypes, renames, withAttributes);
         }
 
         private class ConstantsScraperImpl : IDisposable
@@ -33,11 +35,15 @@ namespace PartitionUtilsLib
 
             private static readonly Regex DefineConstantRegex =
                 new Regex(
-                    @"^((_HRESULT_TYPEDEF_|_NDIS_ERROR_TYPEDEF_)\(((?:0x)?[\da-f]+L?)\)|(\(HRESULT\)((?:0x)?[\da-f]+L?))|(-?\d+\.\d+(?:e\+\d+)?f?)|((?:0x[\da-f]+|\-?\d+)(?:UL|L)?)|((\d+)\s*(<<\s*\d+))|(MAKEINTRESOURCE\(\s*(\-?\d+)\s*\))|(\(HWND\)(-?\d+)))$", RegexOptions.IgnoreCase);
+                    @"^((_HRESULT_TYPEDEF_|_NDIS_ERROR_TYPEDEF_)\(((?:0x)?[\da-f]+L?)\)|(\(HRESULT\)((?:0x)?[\da-f]+L?))|(-?\d+\.\d+(?:e\+\d+)?f?)|((?:0x[\da-f]+|\-?\d+)(?:UL|L)?)|((\d+)\s*(<<\s*\d+))|(MAKEINTRESOURCE\(\s*(\-?\d+)\s*\))|(\(HWND\)(-?\d+))|([a-z0-9_]+\s*\+\s*(\d+|0x[0-de-f]+)))$", RegexOptions.IgnoreCase);
 
             private static readonly Regex DefineGuidConstRegex =
                 new Regex(
                     @"^\s*(DEFINE_GUID|DEFINE_DEVPROPKEY|DEFINE_KNOWN_FOLDER)\s*\((.*)");
+
+            private static readonly Regex DefineEnumFlagsRegex =
+                new Regex(
+                    @"^\s*DEFINE_ENUM_FLAG_OPERATORS\(\s*(\S+)\s*\)\s*\;\s*$");
 
             private Dictionary<string, EnumWriter> namespacesToEnumWriters = new Dictionary<string, EnumWriter>();
             private Dictionary<string, ConstantWriter> namespacesToConstantWriters = new Dictionary<string, ConstantWriter>();
@@ -47,9 +53,13 @@ namespace PartitionUtilsLib
 
             private List<EnumObject> enumObjectsFromJsons;
             private Dictionary<string, string> withTypes;
+            private Dictionary<string, string> withAttributes;
 
             private Dictionary<string, List<EnumObject>> enumMemberNameToEnumObj;
             private Dictionary<string, string> exclusionNamesToPartitions;
+
+            private string constantsHeaderText;
+            private string enumFlagsFixupFileName;
 
             public ConstantsScraperImpl()
             {
@@ -58,17 +68,23 @@ namespace PartitionUtilsLib
             public void ScrapeConstants(
                 string repoRoot,
                 string[] enumJsonFiles,
+                string constantsHeaderText,
                 Dictionary<string, string> exclusionNamesToPartitions,
                 Dictionary<string, string> requiredNamespaces,
                 Dictionary<string, string> remaps,
                 Dictionary<string, string> withTypes,
-                Dictionary<string, string> renames)
+                Dictionary<string, string> renames,
+                Dictionary<string, string> withAttributes)
             {
                 this.requiredNamespaces = new WildcardDictionary(requiredNamespaces);
                 this.withTypes = withTypes;
                 this.exclusionNamesToPartitions = exclusionNamesToPartitions;
+                this.constantsHeaderText = constantsHeaderText;
+                this.withAttributes = withAttributes;
 
                 this.repoRoot = Path.GetFullPath(repoRoot);
+
+                this.InitEnumFlagsFixupFile();
 
                 this.LoadEnumObjectsFromJsonFiles(enumJsonFiles, renames);
 
@@ -106,6 +122,12 @@ namespace PartitionUtilsLib
 
             private static void MergeObjIntoOther(EnumObject src, EnumObject dest, Dictionary<string, List<EnumObject>> memberMap)
             {
+                // Don't mess with an object that was declared to be finished in the json
+                if (src.finished)
+                {
+                    return;
+                }
+
                 foreach (var m in src.members)
                 {
                     if (StringComparer.OrdinalIgnoreCase.Equals(m.name, "None"))
@@ -194,6 +216,17 @@ namespace PartitionUtilsLib
                 }
 
                 return rawValue;
+            }
+
+            private void InitEnumFlagsFixupFile()
+            {
+                this.enumFlagsFixupFileName = Path.Combine(repoRoot, $@"generation\emitter\enumsMakeFlags.generated.rsp");
+                if (File.Exists(this.enumFlagsFixupFileName))
+                {
+                    File.Delete(this.enumFlagsFixupFileName);
+                }
+
+                File.AppendAllText(this.enumFlagsFixupFileName, "--enum-Make-Flags\r\n");
             }
 
             private List<EnumObject> LoadEnumsFromJsonFiles(string[] enumJsonFiles, Dictionary<string, string> renames)
@@ -303,7 +336,7 @@ namespace PartitionUtilsLib
                         File.Delete(partConstantsFile);
                     }
 
-                    constantWriter = new ConstantWriter(partConstantsFile, foundNamespace);
+                    constantWriter = new ConstantWriter(partConstantsFile, foundNamespace, this.constantsHeaderText, this.withAttributes);
                     this.namespacesToConstantWriters.Add(foundNamespace, constantWriter);
                 }
 
@@ -467,6 +500,7 @@ namespace PartitionUtilsLib
                             // Skip if not #define ...
                             if (!defineMatch.Success)
                             {
+                                this.TryScrapingEnumFlags(line);
                                 continue;
                             }
 
@@ -551,6 +585,11 @@ namespace PartitionUtilsLib
                                     this.AddConstantInteger(currentNamespace, nativeTypeName, name, valueText);
                                     continue;
                                 }
+                                // (IDENT_FOO + 4)
+                                else if (match.Groups[15].Success)
+                                {
+                                    valueText = match.Groups[15].Value;
+                                }
                                 else
                                 {
                                     continue;
@@ -604,7 +643,7 @@ namespace PartitionUtilsLib
                                                 var needMerging = list.Where(o => o != foundObjEnum).ToArray();
                                                 foreach (var src in needMerging)
                                                 {
-                                                    MergeObjIntoOther(src, foundObjEnum, enumMemberNameToEnumObj);
+                                                    MergeObjIntoOther(src, foundObjEnum, this.enumMemberNameToEnumObj);
                                                 }
 
                                                 list.Clear();
@@ -629,6 +668,16 @@ namespace PartitionUtilsLib
                             }
                         }
                     }
+                }
+            }
+
+            private void TryScrapingEnumFlags(string line)
+            {
+                var match = DefineEnumFlagsRegex.Match(line);
+                if (match.Success)
+                {
+                    var enumName = match.Groups[1].Value;
+                    File.AppendAllText(this.enumFlagsFixupFileName, $"{enumName}\r\n");
                 }
             }
 
@@ -684,12 +733,20 @@ namespace PartitionUtilsLib
                         }
 
                         // If we don't already have a remap entry for this param or field, add one
-                        if (!remaps.ContainsKey(remapName))
+                        if (!remaps.TryGetValue(remapName, out string remapValue))
                         {
                             remapsToAdd.Add(remapName);
+                            remapCount++;
                         }
-
-                        remapCount++;
+                        else
+                        {
+                            // If the existing remap wants to use this enum, keep track
+                            // so that we write the enum
+                            if (remapValue == obj.name)
+                            {
+                                remapCount++;
+                            }
+                        }
                     }
 
                     if (foundNamespace == null)
@@ -727,7 +784,9 @@ namespace PartitionUtilsLib
                             namespacesToEnumWriters.Add(foundNamespace, enumWriter);
                         }
 
-                        if (obj.autoPopulate == null)
+                        // Don't remap to another object if it's not an auto-populate
+                        // and it's not marked as already finished
+                        if (obj.autoPopulate == null && !obj.finished)
                         {
                             foreach (var member in obj.members)
                             {
@@ -790,7 +849,7 @@ namespace PartitionUtilsLib
 
             private class SyntaxWalkerForFullNamesAndTypes : CSharpSyntaxWalker
             {
-                private static readonly Regex ValidTypeRegex = new Regex(@"^(uint|int|byte|ulong|long|short|ushort)\**$");
+                private static readonly Regex ValidTypeRegex = new Regex(@"^(uint|int|ulong|long|short|ushort)\**$");
 
                 private Dictionary<string, string> map;
 
@@ -811,7 +870,27 @@ namespace PartitionUtilsLib
                     string fullName = SyntaxUtils.GetFullName(node);
                     string type = node.Type.ToString();
 
+                    this.CacheInfo(node.AttributeLists, fullName, type);
+                }
+
+                private void CacheInfo(SyntaxList<AttributeListSyntax> attributeLists, string fullName, string type)
+                {
+                    string nativeType = SyntaxUtils.GetNativeTypeNameFromAttributesLists(attributeLists);
+
+                    // Don't ever map enums onto strings.
+                    // We may need to make this more intelligent if we find we're stomping on types
+                    // we don't want to change
+                    if (nativeType != null && nativeType.Contains("STR"))
+                    {
+                        return;
+                    }
+
                     this.CacheInfo(fullName, type);
+
+                    if (ValidTypeRegex.IsMatch(type))
+                    {
+                        this.map[fullName] = type;
+                    }
                 }
 
                 private void CacheInfo(string fullName, string type)
@@ -856,7 +935,7 @@ namespace PartitionUtilsLib
 
                     string fullName = SyntaxUtils.GetFullName(variable);
 
-                    this.CacheInfo(fullName, type);
+                    this.CacheInfo(node.AttributeLists, fullName, type);
                 }
             }
         }
