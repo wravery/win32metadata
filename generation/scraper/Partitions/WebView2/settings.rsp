@@ -6,8 +6,10 @@
 <RepoRoot>\generation\scraper
 <IncludeRoot>/shared
 <IncludeRoot>/um
+<IncludeRoot>/winrt
 <WebView2Root>/include
 --traverse
+<IncludeRoot>/winrt/EventToken.h
 <WebView2Root>/include/WebView2.h
 --namespace
 Windows.Win32.WebView2
