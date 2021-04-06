@@ -9,9 +9,8 @@
 <IncludeRoot>/winrt
 <WebView2Root>/include
 --traverse
-<IncludeRoot>/winrt/EventToken.h
 <WebView2Root>/include/WebView2.h
 --namespace
 Windows.Win32.WebView2
 --libraryPath
-<WebView2Root>/x64/WebView2Loader.dll
+WebView2Loader.dll
