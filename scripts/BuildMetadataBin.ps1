@@ -134,6 +134,7 @@ $partitionNames | ForEach-Object -Parallel {
     # Reimport CommonUtils.ps1 to get access to Get-ExternalPackageVersion in this scope
     . "$using:PSScriptRoot\CommonUtils.ps1"
 
+    $outputWinmdFileName = Get-OutputWinmdFileName -Arch $using:arch
     $assemblyVersion = Get-ExternalPackageVersion $defaultArtifactsDir $_
     $externalPackageDir = "$defaultArtifactsDir\InstalledPackages\$_.$assemblyVersion"
     $enumsMakeFlagsRsp = "$using:emitterDir\enumsMakeFlags.$_.rsp"
@@ -156,9 +157,9 @@ $partitionNames | ForEach-Object -Parallel {
     {
         Write-Output "`n"
         Write-Output "Creating "$binDir\$_.winmd"..."
-        Write-Output "Calling: dotnet $using:clangSharpSourceToWinmdBin --sourceDir $using:emitterDir --arch $using:arch --interopFileName $using:metadataInteropBin --baseMetadataFileName $using:outputWinmdFileName --outputNamespace "$_" --outputFileName "$using:binDir\$_.winmd" --version "$assemblyVersion" @$using:remapFileName @$using:requiredNamespacesForNames @$using:autoTypesFileName @$using:enumsRemapFileName @$using:functionPointerFixupsRsp @$enumsMakeFlagsRsp"
+        Write-Output "Calling: dotnet $using:clangSharpSourceToWinmdBin --sourceDir $using:emitterDir --arch $using:arch --interopFileName $using:metadataInteropBin --baseMetadataFileName $outputWinmdFileName --outputNamespace "$_" --outputFileName "$using:binDir\$_.winmd" --version "$assemblyVersion" @$using:remapFileName @$using:requiredNamespacesForNames @$using:autoTypesFileName @$using:enumsRemapFileName @$using:functionPointerFixupsRsp @$enumsMakeFlagsRsp"
 
-        & dotnet $using:clangSharpSourceToWinmdBin --sourceDir $using:emitterDir --arch $using:arch --interopFileName $using:metadataInteropBin --baseMetadataFileName $using:outputWinmdFileName --outputNamespace "$_" --outputFileName "$using:binDir\$_.winmd" --version "$assemblyVersion" @$using:remapFileName @$using:requiredNamespacesForNames @$using:autoTypesFileName @$using:enumsRemapFileName @$using:functionPointerFixupsRsp @$enumsMakeFlagsRsp
+        & dotnet $using:clangSharpSourceToWinmdBin --sourceDir $using:emitterDir --arch $using:arch --interopFileName $using:metadataInteropBin --baseMetadataFileName $outputWinmdFileName --outputNamespace "$_" --outputFileName "$using:binDir\$_.winmd" --version "$assemblyVersion" @$using:remapFileName @$using:requiredNamespacesForNames @$using:autoTypesFileName @$using:enumsRemapFileName @$using:functionPointerFixupsRsp @$enumsMakeFlagsRsp
         if ($LastExitCode -ne 0)
         {
             Write-Error "Failed to build .winmd."
