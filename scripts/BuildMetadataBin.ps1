@@ -70,6 +70,11 @@ $constantsScraperRsp = "$scraperDir\ConstantsScraper.rsp"
 $constantsHeaderTxt = "$scraperDir\ConstantsHeader.txt"
 $enumsJson = "$scraperDir\enums.json"
 
+if (!$SkipBinary)
+{
+    $outputWinmdFileName = Get-OutputWinmdFileName -Arch $arch
+}
+
 if (!$externalOnly)
 {
     if (!$SkipConstants)
@@ -88,8 +93,6 @@ if (!$externalOnly)
 
     if (!$SkipBinary)
     {
-        $outputWinmdFileName = Get-OutputWinmdFileName -Arch $arch
-
         Write-Output "`n"
         Write-Output "Creating $outputWinmdFileName..."
         Write-Output "Calling: dotnet $clangSharpSourceToWinmdBin --sourceDir $emitterDir --arch $arch --interopFileName $metadataInteropBin --outputFileName $outputWinmdFileName --version $assemblyVersion @$remapFileName @$requiredNamespacesForNames @$autoTypesFileName @$enumsRemapFileName @$functionPointerFixupsRsp @$enumsMakeFlagsRsp"
@@ -120,10 +123,10 @@ $emitterDir = "$generationDir\emitter"
 $partitionsDir = "$scraperDir\Partitions"
 
 $remapFileName = "$emitterDir\remap.rsp"
-$enumsRemapFileName = "$emitterDir\generated\enumsRemap.rsp"
+$emitterGeneratedDir = "$emitterDir\generated\$scraperArch"
+$enumsRemapFileName = "$emitterGeneratedDir\enumsRemap.rsp"
 $autoTypesFileName = "$emitterDir\autoTypes.rsp"
-$functionPointerFixupsRsp = "$emitterDir\functionPointerFixups.generated.rsp"
-$enumsMakeFlagsRsp = "$emitterDir\enumsMakeFlags.generated.rsp"
+$functionPointerFixupsRsp = "$emitterGeneratedDir\functionPointerFixups.generated.rsp"
 
 $constantsScraperRsp = "$scraperDir\ConstantsScraper.rsp"
 $enumsJson = "$scraperDir\enums.json"
@@ -137,7 +140,7 @@ $partitionNames | ForEach-Object -Parallel {
     $outputWinmdFileName = Get-OutputWinmdFileName -Arch $using:arch
     $assemblyVersion = Get-ExternalPackageVersion $defaultArtifactsDir $_
     $externalPackageDir = "$defaultArtifactsDir\InstalledPackages\$_.$assemblyVersion"
-    $enumsMakeFlagsRsp = "$using:emitterDir\enumsMakeFlags.$_.rsp"
+    $enumsMakeFlagsRsp = "$using:emitterGeneratedDir\enumsMakeFlags.$_.rsp"
 
     if (!$using:SkipConstants)
     {
