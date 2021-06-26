@@ -5,7 +5,7 @@ Windows.Win32.Foundation,PWSTR,char*
 Windows.Win32.Foundation,PSTR,byte*
 Windows.Win32.Foundation,BSTR,char*,SysFreeString
 Windows.Win32.System.Memory,MEMORY_BASIC_INFORMATION,void*
---remap
+--remapWinmd
 MyStruct::X=MyEnum XX
 MyFunc::x=[In]MyEnum xx
 --requiredNamespaceForName
